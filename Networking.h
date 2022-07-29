@@ -22,26 +22,48 @@ HTTPClient http;
 
 bool notificationSent = false;
 
-void sendNotification() {
-  if ((WiFi.status() == WL_CONNECTED) && !notificationSent) {
+int wifiSleepDelay = 2 * 60 * 1000; // 2 minutes
+unsigned long wifiConnectedTimestamp = 0;
 
-    WiFiClient client;
+bool shouldSaveWifiConfig = false;
 
-    Serial.println("Sending notification");
-    http.begin(client, apiServerUrl);
-    int httpCode = http.GET();
-    String payload = http.getString();
-    Serial.println(payload);
-    http.end();
-    notificationSent = true;
+void saveWifiConfigCallback () {
+  Serial.println("Should save wifi config");
+  shouldSaveWifiConfig = true;
+}
+
+bool connectWifi() {
+  Serial.println("Called connectWifi");
+  bool res = true;
+  if (WiFi.status() != WL_CONNECTED) {
+    WiFi.forceSleepWake();
+    delay(500);
+    WiFi.mode(WIFI_STA);
+    WiFi.config(staticIP, gateway, subnet);
+  
+    wm.setClass("invert");
+    wm.setSaveConfigCallback(saveWifiConfigCallback);
+    wm.setSTAStaticIPConfig(staticIP, gateway, subnet);
+    wm.setConfigPortalTimeout(120);
+  
+    res = wm.autoConnect(autoConnectAP, autoConnectPassword);
+    if (!res) {
+      Serial.println("Connection Failed! Rebooting...");
+      delay(5000);
+      ESP.restart();
+    } else {  
+      Serial.println("Connected to Wifi");
+      wifiConnectedTimestamp = millis();
+    }
+  } else {
+    Serial.println("Wifi was already connected");
   }
+  return res;
 }
 
-void resetNotificationSent() {
-  notificationSent = false;
-}
+boolean setupOTA(const char* nameprefix) {
 
-void setupOTA(const char* nameprefix) {
+  Serial.println("Called setupOTA");
 
   uint16_t maxlen = strlen(nameprefix) + 7;
   char *fullhostname = new char[maxlen];
@@ -53,21 +75,10 @@ void setupOTA(const char* nameprefix) {
   ArduinoOTA.setHostname(fullhostname);
   delete[] fullhostname;
 
-  // Configure and start the WiFi station
-  WiFi.mode(WIFI_STA);
-  WiFi.config(staticIP, gateway, subnet);
-
-  wm.setClass("invert");
-  wm.setConfigPortalTimeout(120);
-
-  bool res = wm.autoConnect(autoConnectAP, autoConnectPassword);
-  if(!res) {
-    Serial.println("Connection Failed! Rebooting...");
-    delay(5000);
-    ESP.restart();
-  } else {  
-    Serial.println("Connected to Wifi");
+  if (!connectWifi()) {
+    return false;
   }
+  Serial.println("setupOTA after wifi connection");
 
   ArduinoOTA.setPassword(otaPassword);
 
@@ -115,4 +126,36 @@ void setupOTA(const char* nameprefix) {
       1,                /* Priority of the task. */
       NULL);            /* Task handle. */
   #endif
+  return true;
+}
+
+void onAlarmStatus() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("Reconnecting Wifi after turning off for delay");
+    if (!connectWifi()) {
+      return;
+    }
+  }
+  if (WiFi.status() == WL_CONNECTED && !notificationSent) {
+    WiFiClient client;
+    Serial.println("Sending notification");
+    http.begin(client, apiServerUrl);
+    int httpCode = http.GET();
+    String payload = http.getString();
+    Serial.println("Response code: " + String(httpCode) + ", payload: " + payload);
+    http.end();
+    notificationSent = true;
+  }
+}
+
+void onNormalStatus() {
+  notificationSent = false;
+  unsigned long nowMillis = millis();
+  if (WiFi.status() == WL_CONNECTED && (nowMillis - wifiConnectedTimestamp > wifiSleepDelay)) {
+    Serial.println("Disabling Wifi after delay with no alarm");
+    wifiConnectedTimestamp = 0;
+    //WiFi.mode(WIFI_OFF);
+    WiFi.forceSleepBegin();
+    delay(100);
+  }
 }

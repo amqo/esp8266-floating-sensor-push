@@ -5,14 +5,9 @@ int led = D6;
 int tonePlayer = D8;
 int buttonState = 1;
 
-int normalDelay = 10000;
-int alarmDelay = 2000;
+int normalDelay = 30 * 1000;
+int alarmDelay = 2 * 1000;
 int accDelay = 0;
-
-// Set how often alarm goes off here
-const byte alarmSeconds = 10;
-const byte alarmMinutes = 0;
-const byte alarmHours = 0;
 
 #if defined (MOTEINO_M0)
   #if defined(SERIAL_PORT_USBVIRTUAL)
@@ -44,7 +39,7 @@ void onAwake() {
   buttonState = digitalRead(FloatSensor);
 
   if (buttonState == LOW) {
-    resetNotificationSent();
+    onNormalStatus();
     blinkLed();
     Serial.println("WATER LEVEL - LOW");
     finalDelay(normalDelay);
@@ -52,7 +47,7 @@ void onAwake() {
     digitalWrite(led, HIGH);
     playAlarm();
     Serial.println("WATER LEVEL - HIGH");
-    sendNotification();
+    onAlarmStatus();
     finalDelay(alarmDelay);
   }
 }
@@ -61,10 +56,12 @@ void blinkLed() {
   digitalWrite(led, HIGH);
   addDelay(100);
   digitalWrite(led, LOW);
+  /*
   addDelay(100);
   digitalWrite(led, HIGH);
   addDelay(100);
   digitalWrite(led, LOW);
+  */
 }
 
 void playAlarm() {
