@@ -24,14 +24,12 @@ void setup() {
   pinMode (led, OUTPUT);
 
   blinkLed();
-  ArduinoOTA.setHostname("FloatingAP");
-  setupOTA("");
+  setupOTA();
 
   delay(500);
 }
 
 void loop() {
-  ArduinoOTA.handle();
   onAwake();
 }
 
