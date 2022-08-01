@@ -109,7 +109,8 @@ void onAlarmStatus() {
   }
 }
 
-void onNormalStatus() {
+bool onNormalStatus() {
   notificationSent = false;
   disableWifi();
+  return WiFi.status() != WL_CONNECTED;
 }

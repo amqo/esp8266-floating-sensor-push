@@ -5,20 +5,24 @@ int led = D6;
 int tonePlayer = D8;
 int buttonState = 1;
 
-int normalDelay = 30 * 1000;
+int normalDelay = 10 * 1000;
 int alarmDelay = 2 * 1000;
 int accDelay = 0;
 
-#if defined (MOTEINO_M0)
-  #if defined(SERIAL_PORT_USBVIRTUAL)
-    #define Serial SERIAL_PORT_USBVIRTUAL // Required for Serial on Zero based boards
-  #endif
-#endif
+uint64_t sleepTimeMicroSeconds = 60e6;
+bool setupFromSleep = false;
 
 void setup() {
   Serial.begin(115200);
-  Serial.setDebugOutput(true);
-  Serial.println("Booting...");
+  while(!Serial) continue;
+
+  if (ESP.getResetReason().indexOf("Sleep") > 0) {
+    Serial.println("Setup from sleep");
+    setupFromSleep = true;
+  } else {
+    Serial.println("Setup first time"); 
+    setupFromSleep = false;
+  }
   
   pinMode(FloatSensor, INPUT_PULLUP);
   pinMode (led, OUTPUT);
@@ -37,9 +41,12 @@ void onAwake() {
   buttonState = digitalRead(FloatSensor);
 
   if (buttonState == LOW) {
-    onNormalStatus();
+    bool doDeepSleep = onNormalStatus() || setupFromSleep;
     blinkLed();
     Serial.println("WATER LEVEL - LOW");
+    if (doDeepSleep) {
+      ESP.deepSleep(sleepTimeMicroSeconds);
+    }
     finalDelay(normalDelay);
   } else {
     digitalWrite(led, HIGH);
@@ -54,12 +61,11 @@ void blinkLed() {
   digitalWrite(led, HIGH);
   addDelay(100);
   digitalWrite(led, LOW);
-  /*
   addDelay(100);
   digitalWrite(led, HIGH);
   addDelay(100);
   digitalWrite(led, LOW);
-  */
+  
 }
 
 void playAlarm() {
